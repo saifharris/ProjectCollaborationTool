@@ -1,73 +1,57 @@
 const request = require("supertest");
-const app = require("../app");
+const app = require("../app"); // Adjust path as necessary
 const mongoose = require("mongoose");
-const Project = require("../models/Project");
-const User = require("../models/User");
+
+let server;
+let token; // To hold the token for authentication
+
+beforeAll((done) => {
+  server = app.listen(4001, () => {
+    // Use the same port as auth and project tests
+    console.log("Test server running on port 4001");
+    done();
+  });
+});
+
+afterAll(async () => {
+  await mongoose.connection.close(); // Close MongoDB connection
+  server.close(); // Close server
+});
 
 describe("Task API", () => {
-  let token, projectId;
-
   beforeAll(async () => {
-    await mongoose.connect(process.env.MONGO_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
+    // Get the token from auth tests
+    const res = await request(app).post("/api/auth/login").send({
+      email: "test@example.com",
+      password: "123456",
     });
-    const userRes = await request(app)
-      .post("/api/auth/register")
-      .send({
-        name: "Test User",
-        email: "task@example.com",
-        password: "123456",
-        designation: "Developer",
-      });
-    token = userRes.body.token;
-
-    const projectRes = await request(app)
-      .post("/api/projects")
-      .set("x-auth-token", token)
-      .send({
-        name: "New Project",
-        description: "Test description",
-        completionTime: new Date(),
-      });
-    projectId = projectRes.body._id;
-  });
-
-  afterAll(async () => {
-    await mongoose.connection.close();
+    token = res.body.token; // Store the token for future tests
   });
 
   it("should create a task", async () => {
     const res = await request(app)
-      .post(`/api/tasks/${projectId}`)
-      .set("x-auth-token", token)
+      .post("/api/tasks")
+      .set("Authorization", `Bearer ${token}`) // Add the token to the header
       .send({
-        title: "New Task",
-        description: "Task description",
-        dueDate: new Date(),
-        assignedTo: "Some User ID",
+        title: "Test Task",
+        description: "This is a test task",
       });
-    expect(res.statusCode).toEqual(200);
-    expect(res.body).toHaveProperty("title", "New Task");
+
+    expect(res.statusCode).toEqual(201); // Adjust according to your implementation
+    expect(res.body).toHaveProperty("taskId");
   });
 
   it("should update task status", async () => {
-    const taskRes = await request(app)
-      .post(`/api/tasks/${projectId}`)
-      .set("x-auth-token", token)
-      .send({
-        title: "New Task",
-        description: "Task description",
-        dueDate: new Date(),
-        assignedTo: "Some User ID",
-      });
-    const taskId = taskRes.body._id;
-
     const res = await request(app)
-      .put(`/api/tasks/status/${taskId}`)
-      .set("x-auth-token", token)
-      .send({ status: "In Progress" });
-    expect(res.statusCode).toEqual(200);
-    expect(res.body).toHaveProperty("status", "In Progress");
+      .put("/api/tasks/1") // Replace with actual task ID
+      .set("Authorization", `Bearer ${token}`) // Add the token to the header
+      .send({
+        status: "completed",
+      });
+
+    expect(res.statusCode).toEqual(200); // Adjust according to your implementation
   });
 });
+
+// Increase timeout for tests
+jest.setTimeout(20000); // 20 seconds

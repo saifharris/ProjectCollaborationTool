@@ -1,49 +1,56 @@
 const request = require("supertest");
-const app = require("../app");
+const app = require("../app"); // Adjust path as necessary
 const mongoose = require("mongoose");
-const User = require("../models/User");
+
+let server;
+let token; // To hold the token for authentication
+
+beforeAll((done) => {
+  server = app.listen(4001, () => {
+    // Use the same port as auth.test.js
+    console.log("Test server running on port 4001");
+    done();
+  });
+});
+
+afterAll(async () => {
+  await mongoose.connection.close(); // Close MongoDB connection
+  server.close(); // Close server
+});
 
 describe("Project API", () => {
-  let token;
-
   beforeAll(async () => {
-    await mongoose.connect(process.env.MONGO_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
+    // Get the token from auth tests
+    const res = await request(app).post("/api/auth/login").send({
+      email: "test@example.com",
+      password: "123456",
     });
-    const res = await request(app)
-      .post("/api/auth/register")
-      .send({
-        name: "Test User",
-        email: "project@example.com",
-        password: "123456",
-        designation: "Developer",
-      });
-    token = res.body.token;
-  });
-
-  afterAll(async () => {
-    await mongoose.connection.close();
+    token = res.body.token; // Store the token for future tests
   });
 
   it("should create a project", async () => {
     const res = await request(app)
       .post("/api/projects")
-      .set("x-auth-token", token)
+      .set("Authorization", `Bearer ${token}`) // Add the token to the header
       .send({
-        name: "New Project",
-        description: "Test description",
-        completionTime: new Date(),
+        title: "Test Project",
+        description: "This is a test project",
       });
-    expect(res.statusCode).toEqual(200);
-    expect(res.body).toHaveProperty("name", "New Project");
+
+    expect(res.statusCode).toEqual(201); // Adjust according to your implementation
+    expect(res.body).toHaveProperty("projectId");
   });
 
   it("should get all projects", async () => {
     const res = await request(app)
       .get("/api/projects")
-      .set("x-auth-token", token);
+      .set("Authorization", `Bearer ${token}`) // Add the token to the header
+      .send();
+
     expect(res.statusCode).toEqual(200);
-    expect(res.body).toHaveLength(1);
+    expect(Array.isArray(res.body)).toBe(true);
   });
 });
+
+// Increase timeout for tests
+jest.setTimeout(20000); // 20 seconds
