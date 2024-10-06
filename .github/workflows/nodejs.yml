@@ -14,7 +14,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [14, 16]
+        node-version: [16.x, 18.x] # Update Node.js version to 16.x and 18.x
 
     steps:
       - uses: actions/checkout@v2
